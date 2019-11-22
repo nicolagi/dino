@@ -58,7 +58,17 @@ func main() {
 		}
 	}()
 
-	srv := server.New(server.WithAddress(opts.MetadataServer), server.WithVersionedStore(metadataStore))
+	srvOpts := []server.Option{
+		server.WithAddress(opts.MetadataServer),
+		server.WithVersionedStore(metadataStore),
+	}
+	if opts.KeyPair.KeyFile != "" {
+		srvOpts = append(srvOpts, server.WithKeyPair(
+			os.ExpandEnv(opts.KeyPair.CertFile),
+			os.ExpandEnv(opts.KeyPair.KeyFile),
+		))
+	}
+	srv := server.New(srvOpts...)
 	addr, err := srv.Listen()
 	if err != nil {
 		log.Fatal(err)

@@ -107,7 +107,22 @@ Also, not a lot of effort has (yet) been made on making this performant.
 
 ## Security
 
-No. (Not yet.)
+Not much. (Not yet.)
+
+The metadataserver can be configured to use TLS, adding a key pair to the configuration.
+
+```
+{
+	metadata_server: "localhost:3003"
+	key_pair: {
+		cert_file: "$HOME/lib/dino/cert.pem"
+		key_file: "$HOME/lib/dino/key.pem"
+	}
+}
+```
+
+The clients will try to do a TLS hand-shake, failing that, it'll try to connect
+in plain TCP.
 
 ## Details
 

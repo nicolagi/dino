@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"errors"
 	"net"
 	"sync"
@@ -15,6 +16,10 @@ type Option func(*options)
 type options struct {
 	address string
 	store   storage.VersionedStore
+
+	tls      bool
+	certFile string
+	keyFile  string
 }
 
 func WithAddress(value string) Option {
@@ -26,6 +31,14 @@ func WithAddress(value string) Option {
 func WithVersionedStore(value storage.VersionedStore) Option {
 	return func(o *options) {
 		o.store = value
+	}
+}
+
+func WithKeyPair(certFile, keyFile string) Option {
+	return func(o *options) {
+		o.tls = true
+		o.certFile = certFile
+		o.keyFile = keyFile
 	}
 }
 
@@ -49,7 +62,17 @@ func New(opts ...Option) *Server {
 }
 
 func (s *Server) Listen() (addr string, err error) {
-	s.ln, err = net.Listen("tcp", s.opts.address)
+	if s.opts.tls {
+		var c tls.Certificate
+		c, err = tls.LoadX509KeyPair(s.opts.certFile, s.opts.keyFile)
+		if err == nil {
+			s.ln, err = tls.Listen("tcp", s.opts.address, &tls.Config{
+				Certificates: []tls.Certificate{c},
+			})
+		}
+	} else {
+		s.ln, err = net.Listen("tcp", s.opts.address)
+	}
 	if err != nil {
 		return
 	}

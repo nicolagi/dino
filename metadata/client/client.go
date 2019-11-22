@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto/tls"
 	"errors"
 	"net"
 	"sync"
@@ -109,13 +110,17 @@ func (c *Client) doWithConn(consumer func(net.Conn) error) error {
 	return nil
 }
 
-func (c *Client) getCachedConn() (net.Conn, error) {
+func (c *Client) getCachedConn() (conn net.Conn, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn != nil {
 		return c.conn, nil
 	}
-	conn, err := net.Dial("tcp", c.opts.address)
+	conn, err = tls.Dial("tcp", c.opts.address, nil)
+	if err != nil {
+		log.WithField("err", err).Warn("Could not dial using TLS, trying plain TCP")
+		conn, err = net.Dial("tcp", c.opts.address)
+	}
 	if err != nil {
 		return nil, err
 	}
