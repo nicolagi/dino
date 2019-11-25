@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/nicolagi/dino/message"
 	log "github.com/sirupsen/logrus"
@@ -86,6 +87,9 @@ func (c *Client) closeBoth(cached net.Conn) {
 // Send sends the message to the server.
 func (c *Client) Send(m message.Message) error {
 	return c.doWithConn(func(conn net.Conn) error {
+		if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			return err
+		}
 		return c.encoder.Encode(conn, m)
 	})
 }

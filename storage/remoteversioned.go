@@ -188,6 +188,9 @@ func (rs *RemoteVersionedStore) do(request message.Message) (response message.Me
 		rs.mu.Lock()
 		rs.unlinkCall(r)
 		rs.mu.Unlock()
+		// Not ideal: The request might be taking longer not because of a
+		// networking issue.
+		rs.remote.Close()
 		return response, ErrTimeout
 	}
 }
