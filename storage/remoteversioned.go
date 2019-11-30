@@ -49,6 +49,16 @@ func WithChangeListener(value ChangeListener) Option {
 
 type ChangeListener func(message.Message)
 
+type remoteCall struct {
+	tag      uint16
+	request  message.Message
+	response message.Message
+	done     chan struct{}
+
+	prev *remoteCall
+	next *remoteCall
+}
+
 // RemoteVersionedStore is an implementation of VersionedStore, via a client to a remote
 // metadataserver process.
 type RemoteVersionedStore struct {
@@ -63,22 +73,60 @@ type RemoteVersionedStore struct {
 	// return when Shutdown is called.
 	doing sync.WaitGroup
 
-	mu         sync.Mutex
-	rendezvous map[uint16]chan message.Message
-	stopped    bool
+	mu        sync.Mutex
+	firstCall *remoteCall
+	lastCall  *remoteCall
+	stopped   bool
 }
 
 func NewRemoteVersionedStore(remote *client.Client, options ...Option) *RemoteVersionedStore {
 	var rs RemoteVersionedStore
 	rs.tags = message.NewMonotoneTags()
 	rs.remote = remote
-	rs.rendezvous = make(map[uint16]chan message.Message)
 	rs.local = NewVersionedWrapper(NewInMemoryStore())
 	rs.opts = defaultOptions
 	for _, o := range options {
 		o(&rs.opts)
 	}
 	return &rs
+}
+
+func (rs *RemoteVersionedStore) newCall(tag uint16, in message.Message) *remoteCall {
+	return &remoteCall{
+		request: in,
+		tag:     tag,
+		done:    make(chan struct{}),
+	}
+}
+
+func (rs *RemoteVersionedStore) linkCall(rc *remoteCall) {
+	if rs.lastCall != nil {
+		rs.lastCall.next = rc
+	} else {
+		rs.firstCall = rc
+	}
+	rs.lastCall = rc
+}
+
+func (rs *RemoteVersionedStore) unlinkCall(rc *remoteCall) {
+	switch {
+	case rc.next == nil && rc.prev == nil:
+		rs.firstCall = nil
+		rs.lastCall = nil
+	case rc.next == nil:
+		rs.lastCall = rc.prev
+		rc.prev.next = nil
+		rc.prev = nil
+	case rc.prev == nil:
+		rs.firstCall = rc.next
+		rc.next.prev = nil
+		rc.next = nil
+	default:
+		rc.prev.next = rc.next
+		rc.prev = nil
+		rc.next.prev = rc.prev
+		rc.next = nil
+	}
 }
 
 func (rs *RemoteVersionedStore) Start() {
@@ -100,31 +148,21 @@ func (rs *RemoteVersionedStore) Stop() {
 	rs.tags.Stop()
 }
 
-func (rs *RemoteVersionedStore) newRendezvous(tag uint16) chan message.Message {
-	c := make(chan message.Message, 1)
+func (rs *RemoteVersionedStore) pairResponse(tag uint16, response message.Message) {
 	rs.mu.Lock()
-	rs.rendezvous[tag] = c
-	rs.mu.Unlock()
-	return c
-}
-
-func (rs *RemoteVersionedStore) doRendezvous(tag uint16, response message.Message) {
-	rs.mu.Lock()
-	c := rs.rendezvous[tag]
-	if c != nil {
-		c <- response
+	call := rs.firstCall
+	for call.tag != tag && call != nil {
+		call = call.next
+	}
+	if call != nil {
+		call.response = response
+		close(call.done)
+		rs.unlinkCall(call)
 	} else {
 		log.WithFields(log.Fields{
 			"message": response,
 		}).Debug("Response for no request?")
 	}
-	delete(rs.rendezvous, tag)
-	rs.mu.Unlock()
-}
-
-func (rs *RemoteVersionedStore) cancelRendezvous(tag uint16) {
-	rs.mu.Lock()
-	delete(rs.rendezvous, tag)
 	rs.mu.Unlock()
 }
 
@@ -133,16 +171,23 @@ func (rs *RemoteVersionedStore) do(request message.Message) (response message.Me
 	rs.doing.Add(1)
 	defer rs.doing.Done()
 	tag := request.Tag()
-	r := rs.newRendezvous(tag)
+	r := rs.newCall(tag, request)
+	rs.mu.Lock()
+	rs.linkCall(r)
+	rs.mu.Unlock()
 	if err := rs.remote.Send(request); err != nil {
-		rs.cancelRendezvous(tag)
+		rs.mu.Lock()
+		rs.unlinkCall(r)
+		rs.mu.Unlock()
 		return response, err
 	}
 	select {
-	case response = <-r:
-		return response, nil
+	case <-r.done:
+		return r.response, nil
 	case <-time.After(rs.opts.requestTimeout):
-		rs.cancelRendezvous(tag)
+		rs.mu.Lock()
+		rs.unlinkCall(r)
+		rs.mu.Unlock()
 		return response, ErrTimeout
 	}
 }
@@ -223,7 +268,7 @@ func (rs *RemoteVersionedStore) receiveLoop() {
 		tag := m.Tag()
 		if tag != 0 {
 			log.WithField("message", m).Debug("Received response")
-			rs.doRendezvous(tag, m)
+			rs.pairResponse(tag, m)
 		}
 		if tag == 0 && m.Kind() == message.KindPut {
 			log.WithField("message", m).Debug("Received broadcast")
