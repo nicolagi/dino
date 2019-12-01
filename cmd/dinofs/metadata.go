@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"syscall"
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/nicolagi/dino/bits"
+	"github.com/nicolagi/dino/storage"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -116,6 +118,9 @@ func (node *dinoNode) sync() syscall.Errno {
 	if node.shouldSaveMetadata {
 		err := node.saveMetadata()
 		if err != nil {
+			if errors.Is(err, storage.ErrStalePut) {
+				node.shouldReloadMetadata = true
+			}
 			log.WithFields(log.Fields{
 				"err": err,
 			}).Error("Could not save metadata")
