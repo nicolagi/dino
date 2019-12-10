@@ -2,12 +2,9 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 
-	"github.com/boltdb/bolt"
 	"github.com/google/gops/agent"
 	"github.com/nicolagi/dino/metadata/server"
 	"github.com/nicolagi/dino/storage"
@@ -23,7 +20,7 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	opts, err := loadOptions(*optsFile)
+	opts, err := loadOptionsFromFile(*optsFile)
 	if err != nil {
 		log.Fatalf("Loading configuration from %q: %v", *optsFile, err)
 	}
@@ -38,34 +35,22 @@ func main() {
 		defer agent.Close()
 	}
 
-	dir := os.ExpandEnv("$HOME/lib/dino")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		log.Fatalf("Could not ensure directory %q exists: %v", dir, err)
-	}
-	file := filepath.Join(dir, fmt.Sprintf("storage-%s.db", opts.Name))
-	db, err := bolt.Open(file, 0600, nil)
+	store, err := storage.NewBuilder(opts.Stores).StoreByName(opts.Backend)
 	if err != nil {
-		log.Fatalf("Could not open database %q: %v", file, err)
+		log.Fatalf("Could not instantiate backend store: %v", err)
 	}
-	store, err := storage.NewBoltStore(db)
-	if err != nil {
-		log.Fatalf("Could not instantiate boltdb store at %q: %v", file, err)
-	}
+
 	metadataStore := storage.NewVersionedWrapper(store)
-	defer func() {
-		if err := db.Close(); err != nil {
-			log.Warnf("Could not close boltdb database: %v", err)
-		}
-	}()
 
 	srvOpts := []server.Option{
-		server.WithAddress(opts.MetadataServer),
+		server.WithAddress(opts.ListenAddress),
 		server.WithVersionedStore(metadataStore),
 	}
-	if opts.KeyPair.KeyFile != "" {
+
+	if opts.KeyFile != "" {
 		srvOpts = append(srvOpts, server.WithKeyPair(
-			os.ExpandEnv(opts.KeyPair.CertFile),
-			os.ExpandEnv(opts.KeyPair.KeyFile),
+			os.ExpandEnv(opts.CertFile),
+			os.ExpandEnv(opts.KeyFile),
 		))
 	}
 	srv := server.New(srvOpts...)

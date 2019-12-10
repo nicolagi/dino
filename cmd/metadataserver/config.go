@@ -2,35 +2,63 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"github.com/BurntSushi/toml"
+	"io"
 	"os"
-
-	"github.com/rogpeppe/rjson"
+	"strings"
 )
 
 var errIncompleteKeyPair = errors.New("must specify both cert file and key file or neither")
 
 type options struct {
-	Name           string `json:"name"`
-	MetadataServer string `json:"metadata_server"`
-	Debug          bool   `json:"debug"`
-	KeyPair        struct {
-		CertFile string `json:"cert_file"`
-		KeyFile  string `json:"key_file"`
-	} `json:"key_pair"`
+	Debug         bool
+	ListenAddress string `toml:"listen_address"`
+
+	// The backend property defines the backend  where the data handled by
+	// the server is actually stored. This can be any key-value store,
+	// defined in the Stores property.
+	Backend string
+
+	// The two properties below are for TLS. Specify both or none (in case
+	// you don't want TLS).
+	CertFile string `toml:"cert_file"`
+	KeyFile  string `toml:"key_file"`
+
+	// Stores defines any number of storage.Store implementations that are
+	// referenced by name in the rest of the configuration. The configuration is
+	// handled by github.com/nicolagi/dino/storage.Builder. Also see the init
+	// functions in that package, to see what configuration properties are
+	// available/needed for each individual store.
+	Stores map[string]interface{}
 }
 
-func loadOptions(pathname string) (*options, error) {
+func loadOptionsFromFile(pathname string) (*options, error) {
 	f, err := os.Open(pathname)
 	if err != nil {
 		return nil, err
 	}
-	var opts *options
-	err = rjson.NewDecoder(f).Decode(&opts)
+	defer func() { _ = f.Close() }()
+	return loadOptions(f)
+}
+
+func loadOptions(r io.Reader) (*options, error) {
+	var opts options
+	decoderMetadata, err := toml.DecodeReader(r, &opts)
 	if err != nil {
 		return nil, err
 	}
-	if (opts.KeyPair.CertFile != "" && opts.KeyPair.KeyFile == "") || (opts.KeyPair.CertFile == "" && opts.KeyPair.KeyFile != "") {
+	var undecoded []toml.Key
+	for _, k := range decoderMetadata.Undecoded() {
+		if !strings.HasPrefix(k.String(), "stores") {
+			undecoded = append(undecoded, k)
+		}
+	}
+	if ulen := len(undecoded); ulen != 0 {
+		return nil, fmt.Errorf("%d undecoded keys: %v", ulen, undecoded)
+	}
+	if (opts.CertFile != "" && opts.KeyFile == "") || (opts.CertFile == "" && opts.KeyFile != "") {
 		return nil, errIncompleteKeyPair
 	}
-	return opts, nil
+	return &opts, nil
 }
