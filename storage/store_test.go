@@ -31,6 +31,29 @@ func TestStoreImplementations(t *testing.T) {
 		setup func(*testing.T) (storage.Store, func())
 	}{
 		{
+			name: "dynamodb",
+			setup: func(t *testing.T) (store storage.Store, teardown func()) {
+				if dynamodbparams == "" {
+					t.Skip()
+				}
+				t.Helper()
+				parts := strings.SplitN(dynamodbparams, ",", 3)
+				profile := parts[0]
+				region := parts[1]
+				table := parts[2]
+				ddbs, err := storage.NewDynamoDBStore(
+					profile,
+					region,
+					table,
+				)
+				if err != nil {
+					t.Fatalf("Could not build DynamoDBStore: %v", err)
+				}
+				return ddbs, func() {
+				}
+			},
+		},
+		{
 			name: "Store implementation backed by S3",
 			setup: func(t *testing.T) (s storage.Store, teardown func()) {
 				if s3params == "" {

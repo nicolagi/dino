@@ -16,6 +16,82 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type DynamoDBStore struct {
+	table string
+	ddb   *dynamodb.DynamoDB
+}
+
+func init() {
+	registerBuilder("dynamodb", func(builder *Builder, config map[string]interface{}) (store Store, err error) {
+		var profile, region, table string
+		profile, err = builder.getString(config, "profile")
+		if err != nil {
+			return
+		}
+		region, err = builder.getString(config, "region")
+		if err != nil {
+			return
+		}
+		table, err = builder.getString(config, "table")
+		if err != nil {
+			return
+		}
+		return NewDynamoDBStore(profile, region, table)
+	})
+}
+
+func NewDynamoDBStore(profile, region, table string) (*DynamoDBStore, error) {
+	s := &DynamoDBStore{
+		table: table,
+	}
+	sess, err := session.NewSession(&aws.Config{
+		Region:      aws.String(region),
+		Credentials: credentials.NewSharedCredentials("", profile),
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.ddb = dynamodb.New(sess)
+	return s, nil
+}
+
+func (s *DynamoDBStore) Put(key, value []byte) (err error) {
+	var input dynamodb.PutItemInput
+	input.TableName = &s.table
+	input.Item = map[string]*dynamodb.AttributeValue{
+		"k": ddbBinary(key),
+	}
+	if len(value) != 0 {
+		input.Item["va"] = ddbBinary(value)
+	}
+	_, err = s.ddb.PutItem(&input)
+	return err
+}
+
+func (s *DynamoDBStore) Get(key []byte) (value []byte, err error) {
+	var input dynamodb.GetItemInput
+	input.TableName = &s.table
+	input.Key = map[string]*dynamodb.AttributeValue{
+		"k": ddbBinary(key),
+	}
+	var output *dynamodb.GetItemOutput
+	if output, err = s.ddb.GetItem(&input); err != nil {
+		if e, ok := err.(awserr.Error); ok {
+			if e.Code() == dynamodb.ErrCodeResourceNotFoundException {
+				return nil, fmt.Errorf("%v: %w", e, ErrNotFound)
+			}
+		}
+		return nil, err
+	}
+	if output.Item == nil {
+		return nil, fmt.Errorf("%.10x: %w", key, ErrNotFound)
+	}
+	if output.Item["va"] == nil {
+		return []byte{}, nil
+	}
+	return output.Item["va"].B, nil
+}
+
 type DynamoDBVersionedStore struct {
 	profile string
 	region  string
