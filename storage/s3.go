@@ -22,6 +22,25 @@ type S3Store struct {
 	client  *s3.S3
 }
 
+func init() {
+	registerBuilder("s3", func(builder *Builder, config map[string]interface{}) (store Store, err error) {
+		var profile, region, bucket string
+		profile, err = builder.getString(config, "profile")
+		if err != nil {
+			return
+		}
+		region, err = builder.getString(config, "region")
+		if err != nil {
+			return
+		}
+		bucket, err = builder.getString(config, "bucket")
+		if err != nil {
+			return
+		}
+		return NewS3Store(profile, region, bucket)
+	})
+}
+
 func NewS3Store(profile, region, bucket string) (*S3Store, error) {
 	sess, err := session.NewSession(&aws.Config{
 		Region:      &region,

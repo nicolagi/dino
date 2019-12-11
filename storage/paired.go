@@ -20,6 +20,28 @@ type Paired struct {
 	wbc chan [2][]byte
 }
 
+func init() {
+	registerBuilder("paired", func(builder *Builder, config map[string]interface{}) (store Store, err error) {
+		slowName, err := builder.getString(config, "slow")
+		if err != nil {
+			return nil, err
+		}
+		fastName, err := builder.getString(config, "fast")
+		if err != nil {
+			return nil, err
+		}
+		slow, err := builder.StoreByName(slowName)
+		if err != nil {
+			return nil, err
+		}
+		fast, err := builder.StoreByName(fastName)
+		if err != nil {
+			return nil, err
+		}
+		return NewPaired(fast, slow), nil
+	})
+}
+
 func NewPaired(fast, slow Store) Paired {
 	p := Paired{
 		fast: fast,

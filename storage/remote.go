@@ -13,6 +13,16 @@ type RemoteStore struct {
 	address string
 }
 
+func init() {
+	registerBuilder("remote", func(builder *Builder, config map[string]interface{}) (store Store, err error) {
+		address, err := builder.getString(config, "address")
+		if err != nil {
+			return nil, err
+		}
+		return NewRemoteStore(address), nil
+	})
+}
+
 func NewRemoteStore(address string) *RemoteStore {
 	return &RemoteStore{address: address}
 }

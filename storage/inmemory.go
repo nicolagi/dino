@@ -12,6 +12,12 @@ type InMemoryStore struct {
 	m map[string][]byte
 }
 
+func init() {
+	registerBuilder("in-memory", func(*Builder, map[string]interface{}) (store Store, err error) {
+		return NewInMemoryStore(), nil
+	})
+}
+
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
 		m: make(map[string][]byte),

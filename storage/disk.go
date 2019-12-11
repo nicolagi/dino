@@ -13,6 +13,20 @@ type DiskStore struct {
 	dir string
 }
 
+func init() {
+	registerBuilder("disk", func(builder *Builder, config map[string]interface{}) (store Store, err error) {
+		dir, err := builder.getString(config, "dir")
+		if err != nil {
+			return nil, err
+		}
+		dir = os.ExpandEnv(dir)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return nil, err
+		}
+		return NewDiskStore(dir), nil
+	})
+}
+
 func NewDiskStore(dir string) *DiskStore {
 	return &DiskStore{dir: dir}
 }
