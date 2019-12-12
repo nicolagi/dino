@@ -44,10 +44,13 @@ After this, create some initial configuration.
 	}
 	EOF
 	cat > $HOME/lib/dino/metadataserver.config <<EOF
-	{
-		metadata_server: "localhost:3003"
-		debug: true
-	}
+	debug = true
+	listen_address = "localhost:3003"
+	backend = "simple"
+	[stores]
+	[stores.simple]
+	type = "boltdb"
+	file = "$HOME/lib/dino/metadata.db"
 	EOF
 	cat > $HOME/lib/dino/fs-default.config <<EOF
 	{
