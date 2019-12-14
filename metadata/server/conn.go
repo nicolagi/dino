@@ -7,6 +7,7 @@ import (
 	"github.com/nicolagi/dino/message"
 	"github.com/nicolagi/dino/storage"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type serverConn struct {
@@ -16,6 +17,8 @@ type serverConn struct {
 	conn    net.Conn
 	encoder *message.Encoder
 	decoder *message.Decoder
+
+	authorized bool
 }
 
 func (s *Server) wrapConn(conn net.Conn) *serverConn {
@@ -58,7 +61,26 @@ func (sc *serverConn) handleInput() {
 			log.Warn(err)
 			continue
 		}
-		output := storage.ApplyMessage(sc.server.opts.store, input)
+		var output message.Message
+		if sc.server.opts.authHash != "" && !sc.authorized {
+			switch {
+			case input.Kind() != message.KindAuth:
+				output = message.NewErrorMessage(input.Tag(), "go away, bad message type")
+			case bcrypt.CompareHashAndPassword([]byte(sc.server.opts.authHash), []byte(input.Value())) == nil:
+				sc.authorized = true
+				output = message.NewAuthMessage(input.Tag(), "")
+			default:
+				output = message.NewErrorMessage(input.Tag(), "go away, bad password")
+			}
+		} else {
+			output = storage.ApplyMessage(sc.server.opts.store, input)
+		}
+		if log.IsLevelEnabled(log.DebugLevel) {
+			log.WithFields(log.Fields{
+				"input":  input,
+				"output": output,
+			}).Debug("Handled message")
+		}
 		if err := sc.encoder.Encode(sc.conn, output); err != nil {
 			log.Warn(err)
 		}

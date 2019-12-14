@@ -148,6 +148,9 @@ func (s *Server) broadcast(excluded uint16, m message.Message) {
 		if excluded == conn.id {
 			continue
 		}
+		if s.opts.authHash != "" && !conn.authorized {
+			continue
+		}
 		logger := log.WithFields(log.Fields{
 			"message":   broadcastMessage,
 			"sender":    excluded,
