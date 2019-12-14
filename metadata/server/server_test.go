@@ -27,7 +27,18 @@ func TestServer(t *testing.T) {
 		var response message.Message
 		require.Nil(t, c.Receive(&response))
 		assert.Equal(t, message.KindError, response.Kind())
-		assert.Equal(t, "error messages cannot be applied", response.Value())
+		assert.Equal(t, "messages of kind ERROR cannot be applied", response.Value())
+	})
+	t.Run("send auth message", func(t *testing.T) {
+		address, cleanup := newDisposableServer(t)
+		defer cleanup()
+		c := newAttachedClient(address)
+		request := message.NewAuthMessage(439, "password")
+		assert.Nil(t, c.Send(request))
+		var response message.Message
+		require.Nil(t, c.Receive(&response))
+		assert.Equal(t, message.KindError, response.Kind())
+		assert.Equal(t, "messages of kind AUTH cannot be applied", response.Value())
 	})
 	t.Run("notify to closed connection", func(t *testing.T) {
 		address, cleanup := newDisposableServer(t)

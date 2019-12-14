@@ -9,7 +9,7 @@ import (
 
 func ApplyMessage(store VersionedStore, in message.Message) (out message.Message) {
 	inTag := in.Tag()
-	switch in.Kind() {
+	switch kind := in.Kind(); kind {
 	case message.KindGet:
 		version, value, err := store.Get([]byte(in.Key()))
 		if err != nil {
@@ -26,8 +26,8 @@ func ApplyMessage(store VersionedStore, in message.Message) (out message.Message
 			"version": in.Version(),
 		}).Debug("Applied put message")
 		return in
-	case message.KindError:
-		return message.NewErrorMessage(inTag, "error messages cannot be applied")
+	case message.KindAuth, message.KindError:
+		return message.NewErrorMessage(inTag, fmt.Sprintf("messages of kind %s cannot be applied", kind))
 	default:
 		return message.NewErrorMessage(inTag, "unknown message kind")
 	}
