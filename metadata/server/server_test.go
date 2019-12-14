@@ -165,13 +165,13 @@ func newDisposableServer(t *testing.T) (address string, cleanup func()) {
 }
 
 func newAttachedClient(address string) (c *client.Client) {
-	return client.New(client.WithAddress(address))
+	return client.New(client.WithAddress(address), client.WithFallbackToPlainTCP())
 }
 
 func newRemoteVersionedStore(address string) (*storage.RemoteVersionedStore, chan message.Message) {
 	recv := make(chan message.Message, 1)
 	vs := storage.NewRemoteVersionedStore(
-		client.New(client.WithAddress(address)),
+		client.New(client.WithAddress(address), client.WithFallbackToPlainTCP()),
 		storage.WithRequestTimeout(5*time.Second),
 		storage.WithChangeListener(func(m message.Message) {
 			recv <- m

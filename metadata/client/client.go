@@ -17,6 +17,8 @@ var (
 
 type options struct {
 	address string
+
+	fallbackToPlainTCP bool
 }
 
 type Option func(*options)
@@ -24,6 +26,12 @@ type Option func(*options)
 func WithAddress(value string) Option {
 	return func(o *options) {
 		o.address = value
+	}
+}
+
+func WithFallbackToPlainTCP() Option {
+	return func(o *options) {
+		o.fallbackToPlainTCP = true
 	}
 }
 
@@ -121,7 +129,7 @@ func (c *Client) getCachedConn() (conn net.Conn, err error) {
 		return c.conn, nil
 	}
 	conn, err = tls.Dial("tcp", c.opts.address, nil)
-	if err != nil {
+	if err != nil && c.opts.fallbackToPlainTCP {
 		log.WithField("err", err).Warn("Could not dial using TLS, trying plain TCP")
 		conn, err = net.Dial("tcp", c.opts.address)
 	}

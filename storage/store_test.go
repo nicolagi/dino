@@ -144,7 +144,7 @@ func TestVersionedStoreImplementations(t *testing.T) {
 					assert.Nil(t, remoteServer.Serve())
 					close(srvc)
 				}()
-				remoteClient := client.New(client.WithAddress(remoteAddress))
+				remoteClient := client.New(client.WithAddress(remoteAddress), client.WithFallbackToPlainTCP())
 				remoteStore := storage.NewRemoteVersionedStore(remoteClient)
 				remoteStore.Start()
 				return remoteStore, func() {
