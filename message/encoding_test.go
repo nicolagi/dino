@@ -2,63 +2,71 @@ package message_test
 
 import (
 	"bytes"
-	"io"
-	"math/rand"
 	"testing"
-	"time"
+	"testing/quick"
 
 	"github.com/nicolagi/dino/message"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMessageWhatYouEncodeIsWhatYouDecode(t *testing.T) {
-
-	testWithNewEncoderAndDecoder := func(t *testing.T, before message.Message) {
+	config := &quick.Config{
+		MaxCount: 100000,
+	}
+	t.Run("pack and unpack messages with fresh encoder/decoder", func(t *testing.T) {
+		identity := func(m message.Message) message.Message {
+			return m
+		}
+		packunpack := func(in message.Message) message.Message {
+			var buf bytes.Buffer
+			var out message.Message
+			encoder := new(message.Encoder)
+			decoder := new(message.Decoder)
+			assert.Nil(t, encoder.Encode(&buf, in))
+			assert.Nil(t, decoder.Decode(&buf, &out))
+			return out
+		}
+		if err := quick.CheckEqual(packunpack, identity, config); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("pack and unpack messages with shared encoder/decoder", func(t *testing.T) {
 		var buf bytes.Buffer
-		err := new(message.Encoder).Encode(&buf, before)
-		assert.Nil(t, err)
-		var after message.Message
-		err = new(message.Decoder).Decode(&buf, &after)
-		assert.Nil(t, err)
-		assert.Equal(t, before, after)
-	}
-
-	test := func(t *testing.T, encoder *message.Encoder, decoder *message.Decoder, rw io.ReadWriter, before message.Message) {
-		var after message.Message
-		assert.Nil(t, encoder.Encode(rw, before))
-		assert.Nil(t, decoder.Decode(rw, &after))
-		assert.Equal(t, before, after)
-	}
-
-	const iters = 100
-
-	rand.Seed(time.Now().UnixNano())
-
-	var buf bytes.Buffer
-	encoder := new(message.Encoder)
-	decoder := new(message.Decoder)
-
-	t.Run("pack and unpack get messages", func(t *testing.T) {
-		for i := 0; i < iters; i++ {
-			m := message.NewGetMessage(message.RandomTag(), message.RandomString())
-			testWithNewEncoderAndDecoder(t, m)
-			test(t, encoder, decoder, &buf, m)
+		encoder := new(message.Encoder)
+		decoder := new(message.Decoder)
+		identity := func(m message.Message) message.Message {
+			return m
+		}
+		packunpack := func(in message.Message) message.Message {
+			var out message.Message
+			assert.Nil(t, encoder.Encode(&buf, in))
+			assert.Nil(t, decoder.Decode(&buf, &out))
+			return out
+		}
+		if err := quick.CheckEqual(packunpack, identity, config); err != nil {
+			t.Fatal(err)
 		}
 	})
-
-	t.Run("pack and unpack put messages", func(t *testing.T) {
-		for i := 0; i < iters; i++ {
-			m := message.NewPutMessage(message.RandomTag(), message.RandomString(), message.RandomString(), message.RandomVersion())
-			testWithNewEncoderAndDecoder(t, m)
-			test(t, encoder, decoder, &buf, m)
-		}
-	})
-
-	t.Run("pack and unpack error messages", func(t *testing.T) {
-		for i := 0; i < iters; i++ {
-			m := message.NewErrorMessage(message.RandomTag(), message.RandomString())
-			testWithNewEncoderAndDecoder(t, m)
-			test(t, encoder, decoder, &buf, m)
-		}
+	t.Run("conversion to string", func(t *testing.T) {
+		assert.Equal(t,
+			"kind=GET tag=42 key=name",
+			message.NewGetMessage(42, "name").String(),
+		)
+		assert.Equal(t,
+			"kind=PUT tag=43 key=name value=mark version=666",
+			message.NewPutMessage(43, "name", "mark", 666).String(),
+		)
+		assert.Equal(t,
+			"kind=ERROR tag=44 value=neutrino...",
+			message.NewErrorMessage(44, "neutrinos hit the memory bank").String(),
+		)
+		assert.Equal(t,
+			"kind=AUTH tag=45 value=true",
+			message.NewAuthMessage(45, "s3cr3t").String(),
+		)
+		assert.Equal(t,
+			"kind=AUTH tag=46 value=false",
+			message.NewAuthMessage(46, "").String(),
+		)
 	})
 }

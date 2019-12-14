@@ -48,7 +48,7 @@ func (e *Encoder) Encode(w io.Writer, m Message) error {
 		e.puts(m.key)
 		e.puts(m.value)
 		e.put64(m.version)
-	case KindError:
+	case KindAuth, KindError:
 		e.makeroom(e.off + 2 + len(m.value))
 		e.puts(m.value)
 	default:
@@ -129,7 +129,7 @@ func (d *Decoder) Decode(r io.Reader, m *Message) error {
 		d.read(r, n+8)
 		m.value = d.gets(n)
 		m.version = d.get64()
-	case KindError:
+	case KindAuth, KindError:
 		n := d.get16()
 		d.read(r, n)
 		m.value = d.gets(n)

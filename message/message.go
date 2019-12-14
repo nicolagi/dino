@@ -3,6 +3,7 @@ package message
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"unicode"
 )
 
@@ -34,6 +35,14 @@ const (
 	// possibly redo the put with the correct version, or give up the put). Other
 	// error conditions might arise.
 	KindError
+
+	// KindAuth is sent with a password value from client to server (only over a
+	// TLS connection) to authorize the client. It is sent with an empty value
+	// from server to client upon successful authorization. If the password does
+	// not match, the server response will be of KindError.
+	KindAuth
+
+	kindCount
 )
 
 // String implements fmt.Stringer.
@@ -45,8 +54,10 @@ func (k Kind) String() string {
 		return "PUT"
 	case KindError:
 		return "ERROR"
+	case KindAuth:
+		return "AUTH"
 	default:
-		return "unknown message kind"
+		return "UNKNOWN"
 	}
 }
 
@@ -64,7 +75,7 @@ type Message struct {
 	key string
 
 	// The value for a put message; doubles as a textual description of the error
-	// for error messages.
+	// for error messages, and as the password in auth messages.
 	value string
 
 	// Version of the value. Meaningful only for put messages.
@@ -91,8 +102,17 @@ func repr(any string) string {
 // if they contain any non-printable character. Also, they will be clipped at 10
 // runes (not necessarily 10 bytes).
 func (m Message) String() string {
-	return fmt.Sprintf("kind=%v tag=%d key=%s value=%s version=%d",
-		m.kind, m.tag, repr(m.key), repr(m.value), m.version)
+	switch m.kind {
+	case KindGet:
+		return fmt.Sprintf("kind=%v tag=%d key=%s", m.kind, m.tag, repr(m.key))
+	case KindError:
+		return fmt.Sprintf("kind=%v tag=%d value=%s", m.kind, m.tag, repr(m.value))
+	case KindAuth:
+		return fmt.Sprintf("kind=%v tag=%d value=%t", m.kind, m.tag, m.value != "")
+	default:
+		// KindPut and unknown messages use all fields.
+		return fmt.Sprintf("kind=%v tag=%d key=%s value=%s version=%d", m.kind, m.tag, repr(m.key), repr(m.value), m.version)
+	}
 }
 
 // Kind returns the kind of a message, which should inform how the message
@@ -119,10 +139,10 @@ func (m Message) Key() string {
 }
 
 // Value returns a key-value pair's value from the message. Call only for
-// KindError and KindPut, else it'll panic.
+// KindAuth, KindError and KindPut, else it'll panic.
 func (m Message) Value() string {
 	switch m.kind {
-	case KindError, KindPut:
+	case KindAuth, KindError, KindPut:
 		return m.value
 	default:
 		panic(m.accessorPanic("Value"))
@@ -173,6 +193,14 @@ func NewErrorMessage(tag uint16, message string) Message {
 	}
 }
 
+func NewAuthMessage(tag uint16, password string) Message {
+	return Message{
+		kind:  KindAuth,
+		tag:   tag,
+		value: password,
+	}
+}
+
 // ForBroadcast returns a copy of the message that's suitable to be broadcasted to
 // many connections.
 func (m Message) ForBroadcast() Message {
@@ -204,4 +232,29 @@ func RandomString() string {
 // RandomVersion is a test helper.
 func RandomVersion() uint64 {
 	return rand.Uint64()
+}
+
+// Generate implements quick.Generator.
+func (Message) Generate(rand *rand.Rand, size int) reflect.Value {
+	var m Message
+	b := make([]byte, size)
+	m.kind = Kind(rand.Uint32()) % kindCount
+	m.tag = uint16(rand.Uint32() % 65536)
+	switch m.kind {
+	case KindGet:
+		rand.Read(b)
+		m.key = string(b)
+	case KindPut:
+		rand.Read(b)
+		m.key = string(b)
+		rand.Read(b)
+		m.value = string(b)
+		m.version = rand.Uint64()
+	case KindAuth, KindError:
+		rand.Read(b)
+		m.value = string(b)
+	default:
+		panic("programmer error")
+	}
+	return reflect.ValueOf(m)
 }
