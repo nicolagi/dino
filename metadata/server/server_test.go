@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 	"time"
 
@@ -136,6 +137,11 @@ func TestServer(t *testing.T) {
 
 		verify(vs2)
 		verify(vs3)
+	})
+	t.Run("should not allow a password to be transmitted in cleartext", func(t *testing.T) {
+		s := server.New(server.WithAuthHash("anything"))
+		_, err := s.Listen()
+		assert.True(t, errors.Is(err, server.ErrPasswordWithoutTLS))
 	})
 }
 

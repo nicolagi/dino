@@ -11,6 +11,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var ErrPasswordWithoutTLS = errors.New("must use TLS if authorization is required")
+
 type Option func(*options)
 
 type options struct {
@@ -20,6 +22,11 @@ type options struct {
 	tls      bool
 	certFile string
 	keyFile  string
+
+	// If non-empty, the server will require a successful auth message exchange
+	// before any other message on a client connection. Only TLS connections can
+	// be used in this case.
+	authHash string
 }
 
 func WithAddress(value string) Option {
@@ -39,6 +46,12 @@ func WithKeyPair(certFile, keyFile string) Option {
 		o.tls = true
 		o.certFile = certFile
 		o.keyFile = keyFile
+	}
+}
+
+func WithAuthHash(value string) Option {
+	return func(o *options) {
+		o.authHash = value
 	}
 }
 
@@ -71,6 +84,9 @@ func (s *Server) Listen() (addr string, err error) {
 			})
 		}
 	} else {
+		if s.opts.authHash != "" {
+			return "", ErrPasswordWithoutTLS
+		}
 		s.ln, err = net.Listen("tcp", s.opts.address)
 	}
 	if err != nil {
