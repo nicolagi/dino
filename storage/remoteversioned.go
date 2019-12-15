@@ -20,6 +20,7 @@ type options struct {
 	requestTimeout  time.Duration
 	responseBackoff time.Duration
 	listener        ChangeListener
+	authKey         string
 }
 
 var defaultOptions = options{
@@ -44,6 +45,12 @@ func WithResponseBackoff(value time.Duration) Option {
 func WithChangeListener(value ChangeListener) Option {
 	return func(o *options) {
 		o.listener = value
+	}
+}
+
+func WithAuthKey(value string) Option {
+	return func(o *options) {
+		o.authKey = value
 	}
 }
 
@@ -77,6 +84,8 @@ type RemoteVersionedStore struct {
 	firstCall *remoteCall
 	lastCall  *remoteCall
 	stopped   bool
+
+	authorized bool
 }
 
 func NewRemoteVersionedStore(remote *client.Client, options ...Option) *RemoteVersionedStore {
@@ -196,6 +205,9 @@ func (rs *RemoteVersionedStore) do(request message.Message) (response message.Me
 }
 
 func (rs *RemoteVersionedStore) Put(version uint64, key []byte, value []byte) (err error) {
+	if err := rs.ensureAuthorized(); err != nil {
+		return err
+	}
 	request := message.NewPutMessage(rs.tags.Next(), string(key), string(value), version)
 	response, err := rs.do(request)
 	if err != nil {
@@ -212,16 +224,23 @@ func (rs *RemoteVersionedStore) Put(version uint64, key []byte, value []byte) (e
 		}
 		return nil
 	case message.KindError:
-		if response.Value() == ErrStalePut.Error() {
+		v := response.Value()
+		if v == ErrStalePut.Error() {
 			return ErrStalePut
 		}
-		return errors.New(response.Value())
+		if strings.Contains(v, "go away") {
+			rs.authorized = false
+		}
+		return errors.New(v)
 	default:
 		return fmt.Errorf("unexpected response kind: %v", response.Kind())
 	}
 }
 
 func (rs *RemoteVersionedStore) Get(key []byte) (version uint64, value []byte, err error) {
+	if err := rs.ensureAuthorized(); err != nil {
+		return 0, nil, err
+	}
 	version, value, err = rs.local.Get(key)
 	if err == nil {
 		return
@@ -234,14 +253,38 @@ func (rs *RemoteVersionedStore) Get(key []byte) (version uint64, value []byte, e
 	case message.KindPut:
 		return response.Version(), []byte(response.Value()), nil
 	case message.KindError:
-		if strings.HasSuffix(response.Value(), "not found") {
+		v := response.Value()
+		if strings.HasSuffix(v, "not found") {
 			return 0, nil, ErrNotFound
 		}
-		return 0, nil, errors.New(response.Value())
+		if strings.Contains(v, "go away") {
+			rs.authorized = false
+		}
+		return 0, nil, errors.New(v)
 	default:
 		fmt.Println(response.String())
 		return 0, nil, fmt.Errorf("unexpected response kind: %v", response.Kind())
 	}
+}
+
+func (rs *RemoteVersionedStore) ensureAuthorized() error {
+	if rs.opts.authKey == "" || rs.authorized {
+		return nil
+	}
+	request := message.NewAuthMessage(rs.tags.Next(), rs.opts.authKey)
+	response, err := rs.do(request)
+	if err != nil {
+		return fmt.Errorf("not authorized: %w", err)
+	}
+	if response.Kind() == message.KindAuth {
+		rs.authorized = true
+		return nil
+	}
+	// Fail closed.
+	if response.Kind() == message.KindError {
+		return fmt.Errorf("not authorized: %v", response.Value())
+	}
+	return fmt.Errorf("not authorized, got response of kind %v", response.Kind())
 }
 
 func (rs *RemoteVersionedStore) receiveLoop() {
