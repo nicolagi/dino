@@ -21,6 +21,9 @@ type config struct {
 		// Properties for "dino" type.
 		Address string `json:"address"`
 
+		// Authorize client connections with this key, if non-empty.
+		AuthKey string `json:"auth_key"`
+
 		// Properties for "dynamodb" type.
 		Profile string `json:"profile"`
 		Region  string `json:"region"`

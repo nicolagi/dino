@@ -136,10 +136,18 @@ func storeImpl(c *config) (storage.Store, error) {
 func versionedStoreImpl(c *config, factory *dinoNodeFactory) (store storage.VersionedStore, close func()) {
 	switch c.Metadata.Type {
 	case "dino":
-		s := storage.NewRemoteVersionedStore(
-			client.New(client.WithAddress(c.Metadata.Address)),
+		lowLevelOpts := []client.Option{
+			client.WithAddress(c.Metadata.Address),
+		}
+		highLevelOpts := []storage.Option{
 			storage.WithChangeListener(factory.invalidateCache),
-		)
+		}
+		if c.Metadata.AuthKey != "" {
+			highLevelOpts = append(highLevelOpts, storage.WithAuthKey(c.Metadata.AuthKey))
+		} else {
+			lowLevelOpts = append(lowLevelOpts, client.WithFallbackToPlainTCP())
+		}
+		s := storage.NewRemoteVersionedStore(client.New(lowLevelOpts...), highLevelOpts...)
 		s.Start()
 		return s, s.Stop
 	case "dynamodb":
