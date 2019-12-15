@@ -3,10 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/BurntSushi/toml"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/BurntSushi/toml"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var errIncompleteKeyPair = errors.New("must specify both cert file and key file or neither")
@@ -24,6 +26,10 @@ type options struct {
 	// you don't want TLS).
 	CertFile string `toml:"cert_file"`
 	KeyFile  string `toml:"key_file"`
+
+	// If non-empty, the server will require a successful exchange of auth
+	// messages before any put/get messages.
+	AuthHash string `toml:"auth_hash"`
 
 	// Stores defines any number of storage.Store implementations that are
 	// referenced by name in the rest of the configuration. The configuration is
@@ -59,6 +65,15 @@ func loadOptions(r io.Reader) (*options, error) {
 	}
 	if (opts.CertFile != "" && opts.KeyFile == "") || (opts.CertFile == "" && opts.KeyFile != "") {
 		return nil, errIncompleteKeyPair
+	}
+	if opts.AuthHash != "" {
+		// There's no explicit validation of hashes in the bcrypt
+		// package.  But I suspect bcrypt.Cost() will return an error
+		// on invalid hashes, so let's use that as a proxy for
+		// "validate".
+		if _, err := bcrypt.Cost([]byte(opts.AuthHash)); err != nil {
+			return nil, fmt.Errorf("invalid auth hash: %w", err)
+		}
 	}
 	return &opts, nil
 }

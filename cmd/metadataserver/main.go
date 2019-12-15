@@ -53,6 +53,9 @@ func main() {
 			os.ExpandEnv(opts.KeyFile),
 		))
 	}
+	if opts.AuthHash != "" {
+		srvOpts = append(srvOpts, server.WithAuthHash(opts.AuthHash))
+	}
 	srv := server.New(srvOpts...)
 	addr, err := srv.Listen()
 	if err != nil {

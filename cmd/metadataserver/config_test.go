@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
+	"strings"
+	"testing"
+	"testing/quick"
+
 	"github.com/nicolagi/dino/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"strings"
-	"testing"
 )
 
 func TestConfig(t *testing.T) {
@@ -44,5 +47,23 @@ type = "in-memory"
 		require.NotNil(t, store)
 		_, ok := store.(storage.Paired)
 		assert.True(t, ok)
+	})
+	t.Run("invalid auth key", func(t *testing.T) {
+		err := quick.Check(func(s string) bool {
+			if s == "" {
+				// Randomly generated strings won't be valid hashes, but empty
+				// strings bypass validation (it's a sentinel value for "auth
+				// not required).
+				return true
+			}
+			opts, err := loadOptions(strings.NewReader(fmt.Sprintf("auth_hash = %q", s)))
+			if opts != nil || err == nil {
+				return false
+			}
+			return strings.Contains(err.Error(), "invalid auth hash")
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 	})
 }
