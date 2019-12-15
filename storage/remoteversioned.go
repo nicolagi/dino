@@ -24,8 +24,8 @@ type options struct {
 }
 
 var defaultOptions = options{
-	requestTimeout:  time.Second,
-	responseBackoff: time.Second,
+	requestTimeout:  5 * time.Second,
+	responseBackoff: 5 * time.Second,
 }
 
 type Option func(*options)
