@@ -37,29 +37,25 @@ func (sc *serverConn) handleInput() {
 	for {
 		var input message.Message
 		if err := sc.decoder.Decode(sc.conn, &input); err != nil {
+			logger := log.WithFields(log.Fields{
+				"err":    err,
+				"id":     sc.id,
+				"remote": sc.conn.RemoteAddr(),
+				"local":  sc.conn.LocalAddr(),
+			})
 			// The following happens when the connection is closed on the client side.
 			if err == io.EOF {
-				log.WithFields(log.Fields{
-					"err":    err,
-					"id":     sc.id,
-					"remote": sc.conn.RemoteAddr(),
-					"local":  sc.conn.LocalAddr(),
-				}).Info("Client detached")
+				logger.Info("Client detached")
 				break
 			}
 			if operr, ok := err.(*net.OpError); ok {
 				if operr.Err.Error() == "use of closed network connection" {
-					log.WithFields(log.Fields{
-						"err":    operr,
-						"id":     sc.id,
-						"remote": sc.conn.RemoteAddr(),
-						"local":  sc.conn.LocalAddr(),
-					}).Info("Client detached")
+					logger.WithField("err", operr).Info("Client detached")
 					break
 				}
 			}
-			log.Warn(err)
-			continue
+			logger.Warn("Unknown error decoding")
+			break
 		}
 		var output message.Message
 		if sc.server.opts.authHash != "" && !sc.authorized {
