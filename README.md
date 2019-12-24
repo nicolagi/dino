@@ -115,17 +115,32 @@ Not much. (Not yet.)
 The metadataserver can be configured to use TLS, adding a key pair to the configuration.
 
 ```
-{
-	metadata_server: "localhost:3003"
-	key_pair: {
-		cert_file: "$HOME/lib/dino/cert.pem"
-		key_file: "$HOME/lib/dino/key.pem"
-	}
-}
+listen_address = "localhost:3003"
+cert_file = "$HOME/lib/dino/cert.pem"
+key_file = "$HOME/lib/dino/key.pem"
 ```
 
 The clients will try to do a TLS hand-shake, failing that, it'll try to connect
 in plain TCP.
+
+It is possible to protect the metadataserver process with password-based
+authentication. To achieve that, add an `auth_key` property to the dinofs
+configuration file containing the password, and its bcrypt hash as the
+`auth_hash` property to the metadataserver configuration.
+
+The proper value for `auth_hash` can be generated with the helper program
+`genhash` in this repository:
+
+```
+;; pwd
+/n/muscle/src/dino/metadata/server/genhash
+;; go run genhash.go
+Type password (echo is off) and return:
+The hash is: $2a$10$s8EKCUc1J60HmjAsSB9IdOcwgeW4FSAYTEdoyexdqlLB9CQpb1Vky
+```
+
+If an `auth_key` or `auth_hash` is configured, TLS must be used, and
+fallback to plain TCP will be disabled.
 
 ## Details
 
