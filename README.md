@@ -1,3 +1,17 @@
+**2021-03-02.**
+TL;DR: I'm archiving this project for now, but I may unarchive it at some point in the future and switch from FUSE to 9P.
+
+This project never went past the initial hackathon phase due to lack of interest in the setting where I aimed at using it.
+I've no interest at all in FUSE file systems, I'd much rather use 9P.
+My choice of FUSE was constrained by the mentioned setting (pardon the vagueness).
+Since you're here, you may take a look at my main project instead, which is a 9P file system, [musclefs][muscle].
+
+The original pre-archival README follows.
+
+[muscle]: https://github.com/nicolagi/muscle
+
+---
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/nicolagi/dino)](https://goreportcard.com/report/github.com/nicolagi/dino)
 
 # dino
@@ -69,7 +83,7 @@ After this, create some initial configuration.
 
 Prepare the mountpoint so your user can mount dinofs:
 
-	sudo mkdir /mnt/dino
+	sudo mkdir -p /mnt/dino
 	sudo chown $USER /mnt/dino
 
 Start all servers in the background:
